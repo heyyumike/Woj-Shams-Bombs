@@ -4,6 +4,7 @@ library(tidyverse)
 library(rtweet)
 library(shinycssloaders)
 library(lubridate)
+library(scales)
 
 appname <- "Woj/Sham Bomb Shiny App"
 key <- "pildxkOlSBi1W4e3Sf7d0Df1P"
@@ -39,11 +40,25 @@ server <- function(input, output) {
       
   )
   
-  output$tweets_graph <- renderPlotly(
+  output$tweets_graph <- renderPlotly({
     ggplotly(
-      woj_tweets() %>% ggplot(aes(x = created_at, y = hour, size = favorite_count)) + geom_jitter(alpha = 0.5)
-    )
-  )
+      woj_tweets() %>% ggplot(aes(x = created_at, y = hour, size = favorite_count,
+                                  text = paste0("@", screen_name,
+                                                '<br>',
+                                                '<b>', gsub('(.{1,90})(\\s|$)', '\\1\n', text), '</b>',
+                                                '<br>',
+                                                created_at,
+                                                '<br>',
+                                                '--------------------------------------------------------------------------------',
+                                                '<br>',
+                                                '<b>', paste(comma(retweet_count, accuracy = 1), "Retweets", "        ", comma(favorite_count, accuracy = 1), "Likes"), '</b>',
+                                                '<br>',
+                                                '--------------------------------------------------------------------------------'))) + 
+        geom_jitter(alpha = 0.5) + xlab("Date") + ylab("Hour") + scale_size(range = c(1, 10)),
+      tooltip = c("text"), height = 600) %>%
+      style(hoverlabel = list(bgcolor = "white",
+                              align = "left"))
+  })
 }
 
 
