@@ -35,14 +35,24 @@ ui <- fluidPage(
 
 server <- function(input, output) {
   woj_tweets <- reactive(
-    get_timeline(user = "wojespn", n = 3250) %>% mutate(hour = hour(created_at), date = as.Date(created_at)) %>% 
-      select(screen_name, created_at, text, source, favorite_count, retweet_count, is_retweet, hour, date)
+    get_timeline(user = "wojespn", n = 3250) %>% 
+      mutate(hour = hour(created_at), date = as.Date(created_at), tweet_category = case_when(
+        grepl("woj pod|pod|podcast", text, ignore.case = TRUE) ~ "The Woj Pod/Podcast-Related",
+        grepl("espn story", text, ignore.case = TRUE) ~ "ESPN Story", 
+        grepl("covid|coronavirus|health and safety|h&|quarantine|vaccine|vaccinated|vaccination|virus|pandemic|mask", text, ignore.case = TRUE) ~ "COVID-Related",
+        grepl("contract|contract extension|extension|deal|signing|player option", text, ignore.case = TRUE) ~ "Contract Talks",
+        grepl("trade|trading|acquire|acquiring|sending|send", text, ignore.case = TRUE) ~ "Trade Talks",
+        grepl("injury|injured|sprain|x-ray|surgery|procedure|mri|strain|hamstring|injuries|bruise|imaging|ankle|acl|fracture", text, ignore.case = TRUE) ~ "Injury-Related News",
+        grepl("rookie", text, ignore.case = TRUE) ~ "Rookie-Related News",
+        grepl("No\\.|draft", text, ignore.case = FALSE) ~ "Draft-Related News"
+      )) %>% 
+      select(screen_name, created_at, text, tweet_category, source, favorite_count, retweet_count, is_retweet, hour, date)
       
   )
   
   output$tweets_graph <- renderPlotly({
     ggplotly(
-      woj_tweets() %>% ggplot(aes(x = created_at, y = hour, size = favorite_count,
+      woj_tweets() %>% ggplot(aes(x = created_at, y = hour, size = favorite_count, color = tweet_category,
                                   text = paste0("@", screen_name,
                                                 '<br>',
                                                 '<b>', gsub('(.{1,90})(\\s|$)', '\\1\n', text), '</b>',
@@ -57,7 +67,8 @@ server <- function(input, output) {
         geom_jitter(alpha = 0.5) + xlab("Date") + ylab("Hour") + scale_size(range = c(1, 10)),
       tooltip = c("text"), height = 600) %>%
       style(hoverlabel = list(bgcolor = "white",
-                              align = "left"))
+                              align = "left")) %>%
+      layout(legend = list(title = list(text = "")))
   })
 }
 
