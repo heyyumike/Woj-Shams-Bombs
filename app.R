@@ -6,6 +6,7 @@ library(shinycssloaders)
 library(lubridate)
 library(scales)
 
+# twitter credentials 
 appname <- "Woj/Sham Bomb Shiny App"
 key <- "pildxkOlSBi1W4e3Sf7d0Df1P"
 secret <- "10A2kWMoY1RZuPqcisWaTqWFcQPgSmpZUo0giPRjxEHWLyo2ED"
@@ -24,6 +25,9 @@ ui <- fluidPage(
     
     sidebarLayout(
       sidebarPanel(width = 2,
+                   imageOutput(outputId = "twitter_image",
+                               height = 175),
+                   
                    selectInput(inputId = "insider",
                                label = "Please select a NBA Insider",
                                choices = c("Adrian Wojnarowski", "Shams Charania"))),
@@ -37,6 +41,7 @@ server <- function(input, output) {
   woj_tweets <- reactive(
     get_timeline(user = "wojespn", n = 3250) %>% 
       mutate(hour = hour(created_at), date = as.Date(created_at), tweet_category = case_when(
+        # pattern matching for tweet categories (e.g. injury, trade, contract extension, etc. related news)
         grepl("woj pod|pod|podcast", text, ignore.case = TRUE) ~ "The Woj Pod/Podcast-Related",
         grepl("espn story", text, ignore.case = TRUE) ~ "ESPN Story", 
         grepl("covid|coronavirus|health and safety|h&|quarantine|vaccine|vaccinated|vaccination|virus|pandemic|mask", text, ignore.case = TRUE) ~ "COVID-Related",
@@ -53,6 +58,7 @@ server <- function(input, output) {
   output$tweets_graph <- renderPlotly({
     ggplotly(
       woj_tweets() %>% ggplot(aes(x = created_at, y = hour, size = favorite_count, color = tweet_category,
+                                  # tooltip adjustments
                                   text = paste0("@", screen_name,
                                                 '<br>',
                                                 '<b>', gsub('(.{1,90})(\\s|$)', '\\1\n', text), '</b>',
@@ -70,6 +76,11 @@ server <- function(input, output) {
                               align = "left")) %>%
       layout(legend = list(title = list(text = "")))
   })
+  
+  output$twitter_image <- renderImage({
+    list(src = paste0("twitter_avatars/", input$insider, ".png"),
+         height = "70%", width = "100%")
+  }, deleteFile = FALSE)
 }
 
 
