@@ -4,6 +4,7 @@ library(tidyverse)
 library(rtweet)
 library(shinycssloaders)
 library(lubridate)
+library(zoo)
 library(scales)
 
 # twitter credentials 
@@ -30,11 +31,12 @@ ui <- fluidPage(
                    
                    br(),
                    
-                   selectInput(inputId = "insider",
+                   selectInput(inputId = "nba_insider",
                                label = "Please select a NBA Insider",
                                choices = c("Adrian Wojnarowski", "Shams Charania"))),
       mainPanel(
-        plotlyOutput("tweets_graph") %>% withSpinner(color = "red")
+        plotlyOutput("tweets_graph", height = "150%") %>% withSpinner(color = "red"),
+        plotlyOutput("tweet_frequency_graph") %>% withSpinner(color = "red")
       )
     )
 )
@@ -44,7 +46,7 @@ server <- function(input, output) {
     get_timeline(user = "wojespn", n = 3250) %>% mutate(nba_insider = "Adrian Wojnarowski") %>%
       bind_rows(
         get_timeline(user = "ShamsCharania", n = 3250) %>% mutate(nba_insider = "Shams Charania")
-      ) %>% mutate(hour = hour(created_at), date = as.Date(created_at), tweet_category = case_when(
+      ) %>% mutate(hour = hour(created_at), date = as.Date(created_at), month_year = as.yearmon(created_at), tweet_category = case_when(
         # pattern matching for tweet categories (e.g. injury, trade, contract extension, etc. related news)
         grepl("woj pod|podcast", text, ignore.case = TRUE) ~ "The Woj Pod/Podcast-Related",
         grepl("espn story", text, ignore.case = TRUE) ~ "ESPN Story", 
@@ -55,11 +57,52 @@ server <- function(input, output) {
         grepl("rookie", text, ignore.case = TRUE) ~ "Rookie-Related News",
         grepl("No\\.|draft", text, ignore.case = FALSE) ~ "Draft-Related News"
       )) %>% 
-      select(screen_name, nba_insider, created_at, text, tweet_category, source, favorite_count, retweet_count, is_retweet, hour, date)
+      select(screen_name, nba_insider, created_at, text, tweet_category, source, favorite_count, retweet_count, is_retweet, hour, date, month_year)
   )
   
+  woj_shams_monthly_tweets <- reactive(
+    woj_shams_tweets() %>% filter(is_retweet == FALSE) %>% group_by(nba_insider, month_year) %>%
+      summarise(tweet_count = n(), avg_favorite = mean(favorite_count))
+  )
+  
+  output$tweet_frequency_graph <- renderPlotly({
+    if (input$nba_insider == "Adrian Wojnarowski") {
+      woj_monthly_data <- reactive(
+        woj_shams_monthly_tweets() %>% filter(nba_insider == "Adrian Wojnarowski")
+      )
+      
+      woj_monthly_coeff <- reactive(
+        max(woj_monthly_data()$avg_favorite) / max(woj_monthly_data()$tweet_count)
+      )
+      
+      ggplotly(
+        woj_monthly_data() %>% ggplot(aes(x = month_year)) +
+          geom_bar(aes(y = tweet_count), stat = "identity", color = "black", fill = "white") +
+          geom_line(aes(y = avg_favorite / woj_monthly_coeff()), linetype = "dashed") +
+          geom_point(aes(y = avg_favorite / woj_monthly_coeff())) +
+          scale_y_continuous(name = "Tweet Count", sec.axis = sec_axis(trans = ~.*woj_monthly_coeff(), name = "Avg. Favorites"))
+      )
+    } else {
+      shams_monthly_data <- reactive(
+        woj_shams_monthly_tweets() %>% filter(nba_insider == "Shams Charania")
+      )
+      
+      shams_monthly_coeff <- reactive(
+        max(shams_monthly_data()$avg_favorite) / max(shams_monthly_data()$tweet_count)
+      )
+      
+      ggplotly(
+        shams_monthly_data() %>% ggplot(aes(x = month_year)) +
+          geom_bar(aes(y = tweet_count), stat = "identity", color = "black", fill = "white") +
+          geom_line(aes(y = avg_favorite / shams_monthly_coeff()), linetype = "dashed") +
+          geom_point(aes(y = avg_favorite / shams_monthly_coeff())) +
+          scale_y_continuous(name = "Tweet Count", sec.axis = sec_axis(trans = ~.*shams_monthly_coeff(), name = "Avg. Favorites"))
+      )
+    }
+  })
+  
   output$tweets_graph <- renderPlotly({
-    if (input$insider == "Adrian Wojnarowski") {
+    if (input$nba_insider == "Adrian Wojnarowski") {
       ggplotly(
         woj_shams_tweets() %>% filter(nba_insider == "Adrian Wojnarowski") %>% ggplot(aes(x = created_at, y = hour, size = favorite_count, color = tweet_category,
                                     # tooltip adjustments
@@ -99,7 +142,7 @@ server <- function(input, output) {
   })
   
   output$twitter_image <- renderImage({
-    list(src = paste0("twitter_avatars/", input$insider, ".jpeg"),
+    list(src = paste0("twitter_avatars/", input$nba_insider, ".jpeg"),
          height = "120%", width = "100%")
   }, deleteFile = FALSE)
 }
