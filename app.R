@@ -40,11 +40,13 @@ ui <- fluidPage(
 )
 
 server <- function(input, output) {
-  woj_tweets <- reactive(
-    get_timeline(user = "wojespn", n = 3250) %>% 
-      mutate(hour = hour(created_at), date = as.Date(created_at), tweet_category = case_when(
+  woj_shams_tweets <- reactive(
+    get_timeline(user = "wojespn", n = 3250) %>% mutate(nba_insider = "Adrian Wojnarowski") %>%
+      bind_rows(
+        get_timeline(user = "ShamsCharania", n = 3250) %>% mutate(nba_insider = "Shams Charania")
+      ) %>% mutate(hour = hour(created_at), date = as.Date(created_at), tweet_category = case_when(
         # pattern matching for tweet categories (e.g. injury, trade, contract extension, etc. related news)
-        grepl("woj pod|pod|podcast", text, ignore.case = TRUE) ~ "The Woj Pod/Podcast-Related",
+        grepl("woj pod|podcast", text, ignore.case = TRUE) ~ "The Woj Pod/Podcast-Related",
         grepl("espn story", text, ignore.case = TRUE) ~ "ESPN Story", 
         grepl("covid|coronavirus|health and safety|h&|quarantine|vaccine|vaccinated|vaccination|virus|pandemic|mask", text, ignore.case = TRUE) ~ "COVID-Related",
         grepl("contract|contract extension|extension|deal|signing|player option", text, ignore.case = TRUE) ~ "Contract Talks",
@@ -53,27 +55,13 @@ server <- function(input, output) {
         grepl("rookie", text, ignore.case = TRUE) ~ "Rookie-Related News",
         grepl("No\\.|draft", text, ignore.case = FALSE) ~ "Draft-Related News"
       )) %>% 
-      select(screen_name, created_at, text, tweet_category, source, favorite_count, retweet_count, is_retweet, hour, date)
-  )
-  
-  shams_tweets <- reactive(
-    get_timeline(user = "ShamsCharania", n = 3250) %>% 
-      mutate(hour = hour(created_at), date = as.Date(created_at), tweet_category = case_when(
-        # pattern matching for tweet categories (e.g. injury, trade, contract extension, etc. related news)
-        grepl("covid|coronavirus|health and safety|h&|quarantine|vaccine|vaccinated|vaccination|virus|pandemic|mask", text, ignore.case = TRUE) ~ "COVID-Related",
-        grepl("contract|contract extension|extension|deal|signing|player option", text, ignore.case = TRUE) ~ "Contract Talks",
-        grepl("trade|trading|acquire|acquiring|sending|send", text, ignore.case = TRUE) ~ "Trade Talks",
-        grepl("injury|injured|sprain|x-ray|surgery|procedure|mri|strain|hamstring|injuries|bruise|imaging|ankle|acl|fracture", text, ignore.case = TRUE) ~ "Injury-Related News",
-        grepl("rookie", text, ignore.case = TRUE) ~ "Rookie-Related News",
-        grepl("No\\.|draft", text, ignore.case = FALSE) ~ "Draft-Related News"
-      )) %>% 
-      select(screen_name, created_at, text, tweet_category, source, favorite_count, retweet_count, is_retweet, hour, date)
+      select(screen_name, nba_insider, created_at, text, tweet_category, source, favorite_count, retweet_count, is_retweet, hour, date)
   )
   
   output$tweets_graph <- renderPlotly({
     if (input$insider == "Adrian Wojnarowski") {
       ggplotly(
-        woj_tweets() %>% ggplot(aes(x = created_at, y = hour, size = favorite_count, color = tweet_category,
+        woj_shams_tweets() %>% filter(nba_insider == "Adrian Wojnarowski") %>% ggplot(aes(x = created_at, y = hour, size = favorite_count, color = tweet_category,
                                     # tooltip adjustments
                                     text = paste0("@", screen_name,
                                                   '<br>',
@@ -91,7 +79,7 @@ server <- function(input, output) {
         layout(legend = list(title = list(text = "")))
     } else {
       ggplotly(
-        shams_tweets() %>% ggplot(aes(x = created_at, y = hour, size = favorite_count, color = tweet_category,
+        woj_shams_tweets() %>% filter(nba_insider == "Shams Charania") %>% ggplot(aes(x = created_at, y = hour, size = favorite_count, color = tweet_category,
                                     # tooltip adjustments
                                     text = paste0("@", screen_name,
                                                   '<br>',
