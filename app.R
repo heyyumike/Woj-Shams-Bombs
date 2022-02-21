@@ -22,26 +22,36 @@ twitter_token <- create_token(
   access_secret = access_secret)
 
 ui <- fluidPage(
-    titlePanel("Woj/Shams Bombs"),
-    
-    sidebarLayout(
-      sidebarPanel(width = 2,
-                   imageOutput(outputId = "twitter_image",
-                               height = "120%"),
-                   
-                   br(),
-                   
-                   selectInput(inputId = "nba_insider",
-                               label = "Select a NBA Insider",
-                               choices = c("Adrian Wojnarowski", "Shams Charania")),
-                   
-                   textInput(inputId = "word_filter",
-                             label = "Search tweets")),
-      mainPanel(
-        plotlyOutput("tweets_graph", height = "150%") %>% withSpinner(color = "red"),
-        plotlyOutput("tweet_frequency_graph") %>% withSpinner(color = "red")
-      )
+  tags$head(
+    tags$script(async = NA, src = "https://platform.twitter.com/widgets.js")
+  ),
+  
+  titlePanel("Woj/Shams Bombs"),
+  
+  sidebarLayout(
+    sidebarPanel(width = 2,
+                 helpText(strong("Popularity of tweets from NBA Insiders Adrian Wojnarowski (@wojespn)
+                                   and Shams Charania (@ShamsCharania)")),
+                 
+                 br(),
+                 
+                 imageOutput(outputId = "twitter_image",
+                             height = "120%"),
+                 
+                 br(),
+                 
+                 selectInput(inputId = "nba_insider",
+                             label = "Select a NBA Insider",
+                             choices = c("Adrian Wojnarowski", "Shams Charania")),
+                 
+                 textInput(inputId = "word_filter",
+                           label = "Search tweets")),
+    mainPanel(
+      plotlyOutput("tweets_graph", height = "150%") %>% withSpinner(color = "red"),
+      plotlyOutput("tweet_frequency_graph") %>% withSpinner(color = "red"),
+      uiOutput("tweet")
     )
+  )
 )
 
 server <- function(input, output) {
@@ -60,12 +70,16 @@ server <- function(input, output) {
         grepl("rookie", text, ignore.case = TRUE) ~ "Rookie-Related News",
         grepl("No\\.|draft", text, ignore.case = FALSE) ~ "Draft-Related News"
       )) %>% 
-      select(screen_name, nba_insider, created_at, text, tweet_category, source, favorite_count, retweet_count, is_retweet, hour, date, month_year)
+      select(screen_name, status_id, nba_insider, created_at, text, tweet_category, source, favorite_count, retweet_count, is_retweet, hour, date, month_year)
   )
   
   woj_shams_monthly_tweets <- reactive(
     woj_shams_tweets() %>% filter(is_retweet == FALSE) %>% group_by(nba_insider, month_year) %>%
       summarise(tweet_count = n(), avg_favorite = mean(favorite_count))
+  )
+  
+  woj_shams_top_tweets <- reactive(
+    woj_shams_tweets() %>% group_by(nba_insider) %>% top_n(n = 1, wt = favorite_count) %>% select(nba_insider, screen_name, status_id, text, favorite_count)
   )
   
   output$tweet_frequency_graph <- renderPlotly({
@@ -125,7 +139,8 @@ server <- function(input, output) {
       )
       
       validate(
-        need(dim(woj_tweets())[1] != 0, paste0("Search term not found. Please try again."))
+        need(dim(woj_tweets())[1] != 0, paste0("Search term not found. Please try again.")),
+        need(sum(woj_tweets()$favorite_count) != 0, paste0("You've searched for a term found only in retweets. Please try again."))
       )
       
       ggplotly(
@@ -156,18 +171,18 @@ server <- function(input, output) {
       
       ggplotly(
         shams_tweets() %>% ggplot(aes(x = created_at, y = hour, size = favorite_count, color = tweet_category,
-                                    # tooltip adjustments
-                                    text = paste0("@", screen_name,
-                                                  '<br>',
-                                                  '<b>', gsub('(.{1,90})(\\s|$)', '\\1\n', text), '</b>',
-                                                  '<br>',
-                                                  created_at,
-                                                  '<br>',
-                                                  '--------------------------------------------------------------------------------',
-                                                  '<br>',
-                                                  '<b>', paste(comma(retweet_count, accuracy = 1), "Retweets", "        ", comma(favorite_count, accuracy = 1), "Likes"), '</b>',
-                                                  '<br>',
-                                                  '--------------------------------------------------------------------------------'))) + 
+                                      # tooltip adjustments
+                                      text = paste0("@", screen_name,
+                                                    '<br>',
+                                                    '<b>', gsub('(.{1,90})(\\s|$)', '\\1\n', text), '</b>',
+                                                    '<br>',
+                                                    created_at,
+                                                    '<br>',
+                                                    '--------------------------------------------------------------------------------',
+                                                    '<br>',
+                                                    '<b>', paste(comma(retweet_count, accuracy = 1), "Retweets", "        ", comma(favorite_count, accuracy = 1), "Likes"), '</b>',
+                                                    '<br>',
+                                                    '--------------------------------------------------------------------------------'))) + 
           geom_jitter(alpha = 0.5) + xlab("Date") + ylab("Hour") + scale_size(range = c(1, 10)),
         tooltip = c("text"), height = 600) %>% style(hoverlabel = list(bgcolor = "white", align = "left")) %>% 
         layout(legend = list(title = list(text = "")))
@@ -178,6 +193,28 @@ server <- function(input, output) {
     list(src = paste0("twitter_avatars/", input$nba_insider, ".jpeg"),
          height = "120%", width = "100%")
   }, deleteFile = FALSE)
+  
+  output$tweet <- renderUI({
+    if (input$nba_insider == "Adrian Wojnarowski") {
+      tagList(
+        tags$blockquote(class = "twitter-tweet",
+                        tags$a(href = paste0("https://twitter.com/",
+                                             woj_shams_top_tweets() %>% ungroup() %>% filter(nba_insider == "Adrian Wojnarowski") %>% select(screen_name) %>% pull(),
+                                             "/status/",
+                                             woj_shams_top_tweets() %>% ungroup() %>% filter(nba_insider == "Adrian Wojnarowski") %>% select(status_id) %>% pull()))),
+        tags$script('twttr.widgets.load(document.getElementById("tweet"));')
+      )
+    } else {
+      tagList(
+        tags$blockquote(class = "twitter-tweet",
+                        tags$a(href = paste0("https://twitter.com/",
+                                             woj_shams_top_tweets() %>% ungroup() %>% filter(nba_insider == "Shams Charania") %>% select(screen_name) %>% pull(),
+                                             "/status/",
+                                             woj_shams_top_tweets() %>% ungroup() %>% filter(nba_insider == "Shams Charania") %>% select(status_id) %>% pull()))),
+        tags$script('twttr.widgets.load(document.getElementById("tweet"));')
+      )
+    }
+  })
 }
 
 shinyApp(ui = ui, server = server)
