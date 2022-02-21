@@ -32,8 +32,11 @@ ui <- fluidPage(
                    br(),
                    
                    selectInput(inputId = "nba_insider",
-                               label = "Please select a NBA Insider",
-                               choices = c("Adrian Wojnarowski", "Shams Charania"))),
+                               label = "Select a NBA Insider",
+                               choices = c("Adrian Wojnarowski", "Shams Charania")),
+                   
+                   textInput(inputId = "word_filter",
+                             label = "Search tweets")),
       mainPanel(
         plotlyOutput("tweets_graph", height = "150%") %>% withSpinner(color = "red"),
         plotlyOutput("tweet_frequency_graph") %>% withSpinner(color = "red")
@@ -77,11 +80,18 @@ server <- function(input, output) {
       
       ggplotly(
         woj_monthly_data() %>% ggplot(aes(x = month_year)) +
-          geom_bar(aes(y = tweet_count), stat = "identity", color = "black", fill = "white") +
+          geom_bar(aes(y = tweet_count,
+                       text = paste0("Month Year: ", month_year,
+                                     '<br>',
+                                     "Tweet Count: ", tweet_count)), stat = "identity", color = "black", fill = "white") +
           geom_line(aes(y = avg_favorite / woj_monthly_coeff()), linetype = "dashed") +
-          geom_point(aes(y = avg_favorite / woj_monthly_coeff())) +
-          scale_y_continuous(name = "Tweet Count", sec.axis = sec_axis(trans = ~.*woj_monthly_coeff(), name = "Avg. Favorites"))
-      )
+          geom_point(aes(y = avg_favorite / woj_monthly_coeff(),
+                         text = paste0("Month Year: ", month_year,
+                                       '<br>',
+                                       "Avg. Favorites: ", comma(avg_favorite)))) +
+          scale_y_continuous(name = "Tweet Count", sec.axis = sec_axis(trans = ~.*woj_monthly_coeff(), name = "Avg. Favorites")) + xlab("Date") +
+          ggtitle("Tweet Count and Avg. Likes Per Month (not including retweets)"),
+        tooltip = c("text"))
     } else {
       shams_monthly_data <- reactive(
         woj_shams_monthly_tweets() %>% filter(nba_insider == "Shams Charania")
@@ -93,18 +103,33 @@ server <- function(input, output) {
       
       ggplotly(
         shams_monthly_data() %>% ggplot(aes(x = month_year)) +
-          geom_bar(aes(y = tweet_count), stat = "identity", color = "black", fill = "white") +
+          geom_bar(aes(y = tweet_count,
+                       text = paste0("Month Year: ", month_year,
+                                     '<br>',
+                                     "Tweet Count: ", tweet_count)), stat = "identity", color = "black", fill = "white") +
           geom_line(aes(y = avg_favorite / shams_monthly_coeff()), linetype = "dashed") +
-          geom_point(aes(y = avg_favorite / shams_monthly_coeff())) +
-          scale_y_continuous(name = "Tweet Count", sec.axis = sec_axis(trans = ~.*shams_monthly_coeff(), name = "Avg. Favorites"))
-      )
+          geom_point(aes(y = avg_favorite / shams_monthly_coeff(),
+                         text = paste0("Month Year: ", month_year,
+                                       '<br>',
+                                       "Avg. Favorites: ", comma(avg_favorite)))) +
+          scale_y_continuous(name = "Tweet Count", sec.axis = sec_axis(trans = ~.*shams_monthly_coeff(), name = "Avg. Favorites")) + xlab("Date") +
+          ggtitle("Tweet Count and Avg. Likes Per Month (not including retweets)"),
+        tooltip = c("text"))
     }
   })
   
   output$tweets_graph <- renderPlotly({
     if (input$nba_insider == "Adrian Wojnarowski") {
+      woj_tweets <- reactive(
+        woj_shams_tweets() %>% filter(nba_insider == "Adrian Wojnarowski", grepl(input$word_filter, text, ignore.case = TRUE))
+      )
+      
+      validate(
+        need(dim(woj_tweets())[1] != 0, paste0("Search term not found. Please try again."))
+      )
+      
       ggplotly(
-        woj_shams_tweets() %>% filter(nba_insider == "Adrian Wojnarowski") %>% ggplot(aes(x = created_at, y = hour, size = favorite_count, color = tweet_category,
+        woj_tweets() %>% ggplot(aes(x = created_at, y = hour, size = favorite_count, color = tweet_category,
                                     # tooltip adjustments
                                     text = paste0("@", screen_name,
                                                   '<br>',
@@ -121,8 +146,16 @@ server <- function(input, output) {
         tooltip = c("text"), height = 600) %>% style(hoverlabel = list(bgcolor = "white", align = "left")) %>% 
         layout(legend = list(title = list(text = "")))
     } else {
+      shams_tweets <- reactive(
+        woj_shams_tweets() %>% filter(nba_insider == "Shams Charania", grepl(input$word_filter, text, ignore.case = TRUE))
+      )
+      
+      validate(
+        need(dim(shams_tweets())[1] != 0, paste0("Search term not found. Please try again."))
+      )
+      
       ggplotly(
-        woj_shams_tweets() %>% filter(nba_insider == "Shams Charania") %>% ggplot(aes(x = created_at, y = hour, size = favorite_count, color = tweet_category,
+        shams_tweets() %>% ggplot(aes(x = created_at, y = hour, size = favorite_count, color = tweet_category,
                                     # tooltip adjustments
                                     text = paste0("@", screen_name,
                                                   '<br>',
