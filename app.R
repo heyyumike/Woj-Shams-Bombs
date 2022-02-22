@@ -45,7 +45,11 @@ ui <- fluidPage(
                              choices = c("Adrian Wojnarowski", "Shams Charania")),
                  
                  textInput(inputId = "word_filter",
-                           label = "Search tweets")),
+                           label = "Search tweets"),
+                 
+                 radioButtons(inputId = "tweet_selection_criteria",
+                              label = "Tweet Selection",
+                              choices = c("Most Liked", "Most Retweeted", "Most Recent"))),
     mainPanel(
       plotlyOutput("tweets_graph", height = "150%") %>% withSpinner(color = "red"),
       plotlyOutput("tweet_frequency_graph") %>% withSpinner(color = "red"),
@@ -70,7 +74,7 @@ server <- function(input, output) {
         grepl("rookie", text, ignore.case = TRUE) ~ "Rookie-Related News",
         grepl("No\\.|draft", text, ignore.case = FALSE) ~ "Draft-Related News"
       )) %>% 
-      select(screen_name, status_id, nba_insider, created_at, text, tweet_category, source, favorite_count, retweet_count, is_retweet, hour, date, month_year)
+      select(screen_name, status_id, status_url, nba_insider, created_at, text, tweet_category, source, favorite_count, retweet_count, is_retweet, hour, date, month_year)
   )
   
   woj_shams_monthly_tweets <- reactive(
@@ -79,7 +83,7 @@ server <- function(input, output) {
   )
   
   woj_shams_top_tweets <- reactive(
-    woj_shams_tweets() %>% group_by(nba_insider) %>% top_n(n = 1, wt = favorite_count) %>% select(nba_insider, screen_name, status_id, text, favorite_count)
+    woj_shams_tweets() %>% group_by(nba_insider) %>% top_n(n = 1, wt = favorite_count) %>% select(nba_insider, screen_name, status_id, status_url, text, favorite_count)
   )
   
   output$tweet_frequency_graph <- renderPlotly({
@@ -198,19 +202,13 @@ server <- function(input, output) {
     if (input$nba_insider == "Adrian Wojnarowski") {
       tagList(
         tags$blockquote(class = "twitter-tweet",
-                        tags$a(href = paste0("https://twitter.com/",
-                                             woj_shams_top_tweets() %>% ungroup() %>% filter(nba_insider == "Adrian Wojnarowski") %>% select(screen_name) %>% pull(),
-                                             "/status/",
-                                             woj_shams_top_tweets() %>% ungroup() %>% filter(nba_insider == "Adrian Wojnarowski") %>% select(status_id) %>% pull()))),
+                        tags$a(href = woj_shams_top_tweets() %>% ungroup() %>% filter(nba_insider == "Adrian Wojnarowski") %>% select(status_url) %>% pull())),
         tags$script('twttr.widgets.load(document.getElementById("tweet"));')
       )
     } else {
       tagList(
         tags$blockquote(class = "twitter-tweet",
-                        tags$a(href = paste0("https://twitter.com/",
-                                             woj_shams_top_tweets() %>% ungroup() %>% filter(nba_insider == "Shams Charania") %>% select(screen_name) %>% pull(),
-                                             "/status/",
-                                             woj_shams_top_tweets() %>% ungroup() %>% filter(nba_insider == "Shams Charania") %>% select(status_id) %>% pull()))),
+                        tags$a(href = woj_shams_top_tweets() %>% ungroup() %>% filter(nba_insider == "Shams Charania") %>% select(status_url) %>% pull())),
         tags$script('twttr.widgets.load(document.getElementById("tweet"));')
       )
     }
