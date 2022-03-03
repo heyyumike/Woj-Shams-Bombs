@@ -51,9 +51,9 @@ ui <- fluidPage(
                               label = "Tweet Selection",
                               choices = c("Most Liked", "Most Retweeted", "Most Recent"))),
     mainPanel(
-      plotlyOutput("tweets_graph", height = "150%") %>% withSpinner(color = "red"),
-      plotlyOutput("tweet_frequency_graph") %>% withSpinner(color = "red"),
-      uiOutput("tweet")
+      plotlyOutput("tweets_graph", height = "125%", width = "125%") %>% withSpinner(color = "red"),
+      plotlyOutput("tweet_frequency_graph", width = "125%") %>% withSpinner(color = "red"),
+      uiOutput("tweet") %>% withSpinner(color = "red")
     )
   )
 )
@@ -66,13 +66,14 @@ server <- function(input, output) {
       ) %>% mutate(hour = hour(created_at), date = as.Date(created_at), month_year = as.yearmon(created_at), tweet_category = case_when(
         # pattern matching for tweet categories (e.g. injury, trade, contract extension, etc. related news)
         grepl("woj pod|podcast", text, ignore.case = TRUE) ~ "The Woj Pod/Podcast-Related",
-        grepl("espn story", text, ignore.case = TRUE) ~ "ESPN Story", 
-        grepl("covid|coronavirus|health and safety|h&|quarantine|vaccine|vaccinated|vaccination|virus|pandemic|mask", text, ignore.case = TRUE) ~ "COVID-Related",
-        grepl("contract|contract extension|extension|deal|signing|player option", text, ignore.case = TRUE) ~ "Contract Talks",
+        grepl("injury|injured|sprain|x-ray|surgery|procedure|mri|strain|hamstring|injuries|bruise|imaging|ankle|acl|fracture|concussion|rehab|achilles|tightness", text, ignore.case = TRUE) ~ "Injury-Related News",
+        grepl("covid|coronavirus|health and safety|h&|quarantine|vaccine|vaccinated|vaccination|virus|pandemic|mask|protocol|contact tracing", text, ignore.case = TRUE) ~ "COVID-Related",
+        grepl("contract|contract extension|extension|deal|signing|player option|offer|free agent", text, ignore.case = TRUE) ~ "Contract Talks",
         grepl("trade|trading|acquire|acquiring|sending|send", text, ignore.case = TRUE) ~ "Trade Talks",
-        grepl("injury|injured|sprain|x-ray|surgery|procedure|mri|strain|hamstring|injuries|bruise|imaging|ankle|acl|fracture", text, ignore.case = TRUE) ~ "Injury-Related News",
-        grepl("rookie", text, ignore.case = TRUE) ~ "Rookie-Related News",
-        grepl("No\\.|draft", text, ignore.case = FALSE) ~ "Draft-Related News"
+        grepl("No\\.|draft|Draft|rookie", text, ignore.case = FALSE) ~ "Draft/Rookie Related News",
+        grepl("coach|coaching|assistant", text, ignore.case = TRUE) ~ "Coach/Assistant Related News",
+        grepl("espn story|theathletic", text, ignore.case = TRUE) ~ "ESPN Story/The Athletic Related"
+        #TRUE ~ "Miscellaneous"
       )) %>% 
       select(screen_name, status_id, status_url, nba_insider, created_at, text, tweet_category, source, favorite_count, retweet_count, is_retweet, hour, date, month_year)
   )
@@ -82,8 +83,16 @@ server <- function(input, output) {
       summarise(tweet_count = n(), avg_favorite = mean(favorite_count))
   )
   
-  woj_shams_top_tweets <- reactive(
+  woj_shams_most_liked_tweets <- reactive(
     woj_shams_tweets() %>% group_by(nba_insider) %>% top_n(n = 1, wt = favorite_count) %>% select(nba_insider, screen_name, status_id, status_url, text, favorite_count)
+  )
+  
+  woj_shams_most_retweeted_tweets <- reactive(
+    woj_shams_tweets() %>% group_by(nba_insider) %>% top_n(n = 1, wt = retweet_count) %>% select(nba_insider, screen_name, status_id, status_url, text, retweet_count)
+  )
+  
+  woj_shams_most_recent_tweets <- reactive(
+    woj_shams_tweets() %>% group_by(nba_insider) %>% summarise_all(first) %>% select(nba_insider, screen_name, status_id, status_url, text, retweet_count, favorite_count)
   )
   
   output$tweet_frequency_graph <- renderPlotly({
@@ -200,17 +209,45 @@ server <- function(input, output) {
   
   output$tweet <- renderUI({
     if (input$nba_insider == "Adrian Wojnarowski") {
-      tagList(
-        tags$blockquote(class = "twitter-tweet",
-                        tags$a(href = woj_shams_top_tweets() %>% ungroup() %>% filter(nba_insider == "Adrian Wojnarowski") %>% select(status_url) %>% pull())),
-        tags$script('twttr.widgets.load(document.getElementById("tweet"));')
-      )
+      if (input$tweet_selection_criteria == "Most Liked") {
+        tagList(
+          tags$blockquote(class = "twitter-tweet",
+                          tags$a(href = woj_shams_most_liked_tweets() %>% ungroup() %>% filter(nba_insider == "Adrian Wojnarowski") %>% select(status_url) %>% pull())),
+          tags$script('twttr.widgets.load(document.getElementById("tweet"));')
+        )
+      } else if (input$tweet_selection_criteria == "Most Retweeted") {
+        tagList(
+          tags$blockquote(class = "twitter-tweet",
+                          tags$a(href = woj_shams_most_retweeted_tweets() %>% ungroup() %>% filter(nba_insider == "Adrian Wojnarowski") %>% select(status_url) %>% pull())),
+          tags$script('twttr.widgets.load(document.getElementById("tweet"));')
+        )
+      } else {
+        tagList(
+          tags$blockquote(class = "twitter-tweet",
+                          tags$a(href = woj_shams_most_recent_tweets() %>% ungroup() %>% filter(nba_insider == "Adrian Wojnarowski") %>% select(status_url) %>% pull())),
+          tags$script('twttr.widgets.load(document.getElementById("tweet"));')
+        )
+      }
     } else {
-      tagList(
-        tags$blockquote(class = "twitter-tweet",
-                        tags$a(href = woj_shams_top_tweets() %>% ungroup() %>% filter(nba_insider == "Shams Charania") %>% select(status_url) %>% pull())),
-        tags$script('twttr.widgets.load(document.getElementById("tweet"));')
-      )
+      if (input$tweet_selection_criteria == "Most Liked") {
+        tagList(
+          tags$blockquote(class = "twitter-tweet",
+                          tags$a(href = woj_shams_most_liked_tweets() %>% ungroup() %>% filter(nba_insider == "Shams Charania") %>% select(status_url) %>% pull())),
+          tags$script('twttr.widgets.load(document.getElementById("tweet"));')
+        )
+      } else if (input$tweet_selection_criteria == "Most Retweeted") {
+        tagList(
+          tags$blockquote(class = "twitter-tweet",
+                          tags$a(href = woj_shams_most_retweeted_tweets() %>% ungroup() %>% filter(nba_insider == "Shams Charania") %>% select(status_url) %>% pull())),
+          tags$script('twttr.widgets.load(document.getElementById("tweet"));')
+        )
+      } else {
+        tagList(
+          tags$blockquote(class = "twitter-tweet",
+                          tags$a(href = woj_shams_most_recent_tweets() %>% ungroup() %>% filter(nba_insider == "Shams Charania") %>% select(status_url) %>% pull())),
+          tags$script('twttr.widgets.load(document.getElementById("tweet"));')
+        )
+      }
     }
   })
 }
