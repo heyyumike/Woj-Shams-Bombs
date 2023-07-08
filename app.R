@@ -8,12 +8,7 @@ library(zoo)
 library(scales)
 library(DT)
 
-# twitter credentials 
-appname <- "Woj/Sham Bomb Shiny App"
-key <- "pildxkOlSBi1W4e3Sf7d0Df1P"
-secret <- "10A2kWMoY1RZuPqcisWaTqWFcQPgSmpZUo0giPRjxEHWLyo2ED"
-access_token <- "939911634297896960-XRDn4SKq3MM1ugaPohpwxftlmMFJ9hF"
-access_secret <- "DKw8MIwVip0DLUzbpGPPebVwUzt88uDRSfWah3w63OAjq"
+# twitter credentials
 
 twitter_token <- create_token(
   app = appname,
